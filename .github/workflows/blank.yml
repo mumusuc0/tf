@@ -1,0 +1,59 @@
+name: flutter
+
+on:
+  workflow_dispatch:
+  watch:
+    types: started
+jobs:
+  Ubuntu:
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Maximize build space
+      uses: easimon/maximize-build-space@master
+      with:
+        swap-size-mb: 1024
+        remove-dotnet: 'true'
+        remove-haskell: 'true'
+        remove-android: 'true'
+    - name: checkout
+      uses: actions/checkout@v4
+    - name: Install depot_tools
+      run: |
+        git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git "$HOME/depot_tools"
+        echo "$HOME/depot_tools" >> $GITHUB_PATH
+    - name: Install NDK
+      run: |
+        wget -c https://dl.google.com/android/repository/android-ndk-r27c-linux.zip
+        unzip -q android-ndk-r27c-linux.zip -d $HOME
+        echo "NDK_HOME=$HOME/android-ndk-r27c" >> $GITHUB_ENV
+        rm -f android-ndk-r27c-linux.zip
+    - name: make toolchain
+      run: |
+        mkdir -p toolchain/bin
+        TRIPLE=aarch64-linux-android34
+        TOOLCHAIN=$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
+        ln -s $TOOLCHAIN/bin/clang ./toolchain/bin/clang
+        ln -s $TOOLCHAIN/bin/clang++ ./toolchain/bin/clang++
+        ln -s $TOOLCHAIN/lib ./toolchain/lib
+        for tool in "ar" "nm" "strip" "readelf"; do ln -s $TOOLCHAIN/bin/llvm-$tool ./toolchain/bin/$TRIPLE-$tool; done
+    - name: make sysroot
+      run: |
+        mkdir sysroot
+        TMP=$(mktemp -d)
+        wget -c -P $TMP -i packages.txt
+        find $TMP -name '*.deb' | xargs -I% dpkg -x % sysroot
+        cp -r $NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/* sysroot/data/data/com.termux/files/
+        ln -s $(pwd)/sysroot/data/data/com.termux/files/* sysroot/
+        echo "INPUT(-lc)" > sysroot/usr/lib/libpthread.so
+        rm -r $TMP
+    - name: checkout flutter
+      run: |
+        git clone https://github.com/flutter/flutter && git -C flutter checkout 3.29.0
+    - name: sync
+      run: |
+        sudo apt update
+        sudo apt install libfreetype-dev ninja-build -y
+        cp .gclient ./flutter/ && cd flutter && gclient sync
+    - name: SSH
+      uses: csexton/debugger-action@master
+    

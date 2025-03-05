@@ -8,12 +8,6 @@ jobs:
   Ubuntu:
     runs-on: ubuntu-latest
     steps:
-    - name: Maximize build space
-      uses: easimon/maximize-build-space@master
-      with:
-        remove-dotnet: 'true'
-        remove-haskell: 'true'
-        remove-android: 'true'
     - name: checkout
       uses: actions/checkout@v4
     - name: Install depot_tools

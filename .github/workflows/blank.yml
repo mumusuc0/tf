@@ -6,12 +6,11 @@ on:
     types: started
 jobs:
   Ubuntu:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
     - name: Maximize build space
       uses: easimon/maximize-build-space@master
       with:
-        swap-size-mb: 1024
         remove-dotnet: 'true'
         remove-haskell: 'true'
         remove-android: 'true'

@@ -25,14 +25,11 @@ override CONFIGURE += 						\
 	--no-build-embedder-examples 			\
 	--target-toolchain $(ROOT)toolchain 			\
 	--target-sysroot $(ROOT)sysroot 			\
-	--no-lto 			\
 	--runtime-mode $(RUNTIME)
 
 override GN_ARGS += 							\
-	toolchain_prefix="aarch64-linux-android-" 	\
 	use_default_linux_sysroot=false				\
 	is_desktop_linux=false 						\
-	dart_platform_sdk=false \
         test_enable_gl=false \
         test_enable_vulkan=false \
         test_enable_software=false

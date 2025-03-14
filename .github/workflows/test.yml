@@ -1,0 +1,12 @@
+name: test
+
+on:
+  workflow_dispatch:
+  watch:
+    types: started
+jobs:
+  Ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+    - name: SSH
+      uses: csexton/debugger-action@master

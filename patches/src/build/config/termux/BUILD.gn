@@ -1,0 +1,37 @@
+config("compiler") {
+  cflags = ["-fno-strict-aliasing", "-fstack-protector", "--param=ssp-buffer-size=8", "-fPIC", "-pipe", "-fcolor-diagnostics", "-ffunction-sections", "-funwind-tables", "-fno-short-enums", "-nostdinc++", "--target=$custom_target_triple"]
+  cflags_cc = ["-fvisibility-inlines-hidden"]
+  cflags_objcc = ["-fvisibility-inlines-hidden"]
+  ldflags = ["-Wl,--fatal-warnings", "-fPIC", "-Wl,-z,noexecstack", "-Wl,-z,now", "-Wl,-z,relro", "-Wl,-z,defs", "-Wl,--undefined-version", "-Wl,--no-undefined", "-Wl,--exclude-libs,ALL", "-Wl,--icf=all", "-Wl,-z,max-page-size=65536", "--target=$custom_target_triple"]
+  defines = ["__TERMUX__", "HAVE_SYS_UIO_H"]
+  asmflags = cflags
+}
+
+config("runtime_library") {
+  cflags_cc = ["-nostdinc++"]
+  defines = ["__compiler_offsetof=__builtin_offsetof", "nan=__builtin_nan"]
+  ldflags = ["-stdlib=libstdc++", "-Wl,--warn-shared-textrel"]
+  lib_dirs = [ "$custom_toolchain/lib/clang/19/lib/linux/" ]
+  include_dirs = [
+    "//flutter/third_party/libcxx/include",
+    "//flutter/third_party/libcxxabi/include",
+  ]
+}
+
+config("executable_ldconfig") {
+    ldflags = ["-Bdynamic", "-Wl,-z,nocopyreloc"]
+}
+
+import("//build/config/sysroot.gni")
+
+config("sdk") {
+  cflags = []
+  ldflags = []
+  if (defined(custom_sysroot) && custom_sysroot != "") {
+    cflags += [ "--sysroot=" + custom_sysroot ]
+    ldflags += [ "--sysroot=" + custom_sysroot ]
+  }
+  if (defined(target_sysroot) && target_sysroot != "") {
+    cflags += [ "-idirafter$target_sysroot/usr/include" ]
+  }
+}

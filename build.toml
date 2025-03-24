@@ -1,0 +1,8 @@
+# flutter tag
+tag = '3.29.2'
+# ndk api level(>=26)
+api = 26
+# arm, arm64, x86, x86_64?
+arch = ['arm64']
+# debug, release, profile
+runtime = ['debug']

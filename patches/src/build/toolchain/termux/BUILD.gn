@@ -1,0 +1,18 @@
+import("//build/toolchain/gcc_toolchain.gni")
+
+gcc_toolchain("termux") {
+    is_clang = true
+    toolchain_os = "android"
+    toolchain_cpu = "${target_cpu}"
+
+    prefix = "$custom_toolchain/bin"
+    cc = prefix + "/clang"
+    cxx = prefix + "/clang++"
+    asm = prefix + "/clang"
+    ar = prefix + "/llvm-ar"
+    ld = prefix + "/clang++"
+    readelf = prefix + "/llvm-readelf"
+    nm = prefix + "/llvm-nm"
+    strip = prefix + "/llvm-strip"
+}
+

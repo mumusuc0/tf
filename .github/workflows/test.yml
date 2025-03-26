@@ -17,6 +17,12 @@ jobs:
     - name: setup depot-tools
       uses: newkdev/setup-depot-tools@v1.0.1
 
+    - name: install python requirements
+      run: pip install -r requirements.txt
+
+    - name: install sysroot
+      run: tar -xJf sysroot.tar.xz
+
     - name: SSH
       uses: csexton/debugger-action@master
 

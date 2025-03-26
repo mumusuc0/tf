@@ -118,7 +118,7 @@ class Build:
         ndk = Path(ndk).expanduser()
         assert ndk.is_dir(), f"invalid ndk path:\"{ndk}\""
 
-        self.sysroot()
+        # self.sysroot()
         self.clone(tag)
         self.sync()
 

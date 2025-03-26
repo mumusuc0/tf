@@ -6,9 +6,8 @@ solutions = [
     "deps_file": "DEPS",
     "safesync_url": "",
     "custom_deps": {
-      "engine/src/third_party/dart/tools/sdks/dart-sdk": None,
-      "engine/src/flutter/buildtools/linux-x64/clang": None,
-      "engine/src/flutter/buildtools/linux-arm64/clang": None,
+      #"engine/src/flutter/buildtools/linux-x64/clang": None,
+      #"engine/src/flutter/buildtools/linux-arm64/clang": None,
       "engine/src/fuchsia/sdk/linux": None,
       #"engine/src/flutter/third_party/dart/tools/sdks/dart-sdk": None,
       "engine/src/third_party/google_fonts_for_unit_tests": None,

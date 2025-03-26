@@ -58,6 +58,84 @@ index b74b2e2..cb837ae 100644
    assert(custom_sysroot != "")
    assert(custom_target_triple != "")
    host_toolchain = "//build/toolchain/linux:clang_$host_cpu"
+diff --git a/engine/src/build/config/termux/BUILD.gn b/engine/src/build/config/termux/BUILD.gn
+new file mode 100644
+index 0000000..f5aef4e
+--- /dev/null
++++ b/engine/src/build/config/termux/BUILD.gn
+@@ -0,0 +1,49 @@
++config("compiler") {
++  if (is_termux && current_toolchain == default_toolchain) {
++    cflags = ["-fno-strict-aliasing", "-fstack-protector", "--param=ssp-buffer-size=8", "-fPIC", "-pipe", "-fcolor-diagnostics", "-ffunction-sections", "-funwind-tables", "-fno-short-enums", "-nostdinc++", "--target=$custom_target_triple"]
++    cflags_cc = ["-fvisibility-inlines-hidden"]
++    cflags_objcc = ["-fvisibility-inlines-hidden"]
++    ldflags = ["-Wl,--fatal-warnings", "-fPIC", "-Wl,-z,noexecstack", "-Wl,-z,now", "-Wl,-z,relro", "-Wl,-z,defs", "-Wl,--undefined-version", "-Wl,--no-undefined", "-Wl,--exclude-libs,ALL", "-Wl,--icf=all", "-Wl,-z,max-page-size=65536", "--target=$custom_target_triple"]
++    defines = ["__TERMUX__", "HAVE_SYS_UIO_H"]
++    asmflags = cflags
++  } else {
++    configs = ["//build/config/compiler:compiler"]
++  }
++}
++
++config("runtime_library") {
++  if (is_termux && current_toolchain == default_toolchain) {
++    cflags_cc = ["-nostdinc++"]
++    defines = ["__compiler_offsetof=__builtin_offsetof", "nan=__builtin_nan"]
++    ldflags = ["-stdlib=libstdc++", "-Wl,--warn-shared-textrel"]
++    lib_dirs = [ "$custom_toolchain/lib/clang/19/lib/linux/" ]
++    include_dirs = [
++      "//flutter/third_party/libcxx/include",
++      "//flutter/third_party/libcxxabi/include",
++    ]
++  } else {
++    configs = ["//build/config/compiler:runtime_library"]
++  }
++}
++
++config("executable_ldconfig") {
++  if (is_termux && current_toolchain == default_toolchain) {
++    ldflags = ["-Bdynamic", "-Wl,-z,nocopyreloc"]
++  } else {
++    configs = ["//build/config/gcc:executable_ldconfig"]
++  }
++}
++
++import("//build/config/sysroot.gni")
++
++config("sdk") {
++  cflags = []
++  ldflags = []
++  if (defined(custom_sysroot) && custom_sysroot != "") {
++    cflags += [ "--sysroot=" + custom_sysroot ]
++    ldflags += [ "--sysroot=" + custom_sysroot ]
++  }
++  if (defined(target_sysroot) && target_sysroot != "") {
++    cflags += [ "-idirafter$target_sysroot/usr/include" ]
++  }
++}
+diff --git a/engine/src/build/toolchain/termux/BUILD.gn b/engine/src/build/toolchain/termux/BUILD.gn
+new file mode 100644
+index 0000000..004bc9d
+--- /dev/null
++++ b/engine/src/build/toolchain/termux/BUILD.gn
+@@ -0,0 +1,17 @@
++import("//build/toolchain/gcc_toolchain.gni")
++
++gcc_toolchain("termux") {
++    is_clang = true
++    toolchain_os = "android"
++    toolchain_cpu = "${target_cpu}"
++
++    prefix = "$custom_toolchain/bin"
++    cc = prefix + "/clang"
++    cxx = prefix + "/clang++"
++    asm = prefix + "/clang"
++    ar = prefix + "/llvm-ar"
++    ld = prefix + "/clang++"
++    readelf = prefix + "/llvm-readelf"
++    nm = prefix + "/llvm-nm"
++    strip = prefix + "/llvm-strip"
++}
 diff --git a/engine/src/flutter/shell/testing/BUILD.gn b/engine/src/flutter/shell/testing/BUILD.gn
 index 28a19c7..e7c7a69 100644
 --- a/engine/src/flutter/shell/testing/BUILD.gn

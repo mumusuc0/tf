@@ -10,10 +10,16 @@ jobs:
     steps:
     - name: checkout
       uses: actions/checkout@v4
+
     - name: install deps
       run: sudo apt update && sudo apt install libfreetype-dev ninja-build -y
+
+    - name: setup depot-tools
+      uses: newkdev/setup-depot-tools@v1.0.1
+
     - name: SSH
       uses: csexton/debugger-action@master
+
     - name: upload
       uses: actions/upload-artifact@v4
       with:

@@ -12,6 +12,7 @@ solutions = [
       "engine/src/fuchsia/sdk/linux": None,
       #"engine/src/flutter/third_party/dart/tools/sdks/dart-sdk": None,
       "engine/src/third_party/google_fonts_for_unit_tests": None,
+      "engine/src/flutter/third_party/java/openjdk": None,
     },
     "custom_vars" : {
       "setup_githooks" : False,
@@ -26,19 +27,14 @@ solutions = [
     },
     "custom_hooks" : [
       {
-        'name': 'patch src',
+        'name': 'patch engine',
         'pattern': '.',
-        'action': ['git', "-C", "engine/src", "apply", "../patches/src.patch"],
-      },
-      {
-        'name': 'patch flutter',
-        'pattern': '.',
-        'action': ['git', "-C", "engine/src/flutter", "apply", "../patches/flutter.patch"],
+        'action': ['git', "apply", "../patches/engine.patch"],
       },
       {
         'name': 'patch dart',
         'pattern': '.',
-        'action': ['git', "-C", "engine/src/flutter/third_party/dart", "apply", "../patches/dart.patch"],
+        'action': ['git', "-C", "engine/src/flutter/third_party/dart", "apply", "../../../../../../patches/dart.patch"],
       },
     ]
   }

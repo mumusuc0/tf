@@ -11,6 +11,7 @@ from pathlib import Path
 ROOTDIR = Path(__file__).parent
 FLUTTER = ROOTDIR/'flutter'
 SYSROOT = ROOTDIR/'sysroot'
+GCLIENT = ROOTDIR/'.gclient'
 SRCROOT = FLUTTER/'engine/src'
 ARCHENM = ['arm', 'arm64', 'x86_64', 'x86']
 MODEENM = ['debug', 'release', 'profile']
@@ -34,7 +35,11 @@ def _target_output(arch, runtime):
 
 
 class Build:
-    def sysroot(self):
+    def sysroot(self, sysroot: str | Path = SYSROOT):
+        sysroot = Path(sysroot)
+        if not sysroot.exists():
+            sysroot.mkdir()
+
         sys.main(SYSROOT)
 
     def clone(self, tag: str):
@@ -45,7 +50,7 @@ class Build:
         ]
         subprocess.run(cmd, check=True, stderr=True)
 
-    def sync(self, cfg: str | Path = '.gclient'):
+    def sync(self, cfg: str | Path = GCLIENT):
         assert FLUTTER.is_dir(), f"flutter source dir not exist: {FLUTTER}"
         assert cfg.exists(), f".gclient not exist: {cfg}"
 
@@ -88,7 +93,7 @@ class Build:
 
     def build(self, arch: str, runtime: str):
         cmd = [
-            'ninja', '-j4', '-C', _target_output(arch, runtime),
+            'ninja', '-C', _target_output(arch, runtime),
             'flutter/build/archives:artifacts',
             'flutter/build/archives:dart_sdk_archive',
             'flutter/build/archives:flutter_patched_sdk',
@@ -97,8 +102,8 @@ class Build:
         ]
         subprocess.run(cmd, cwd=FLUTTER, check=True, stdout=True, stderr=True)
 
+    # TODO: check gclient and ninja existence
     def __call__(self):
-        return 0
         with open(ROOTDIR/'build.toml', 'rb') as f:
             cfg = tomllib.load(f)
         mode = cfg.get('runtime', ['debug'])
@@ -115,7 +120,7 @@ class Build:
 
         self.sysroot()
         self.clone(tag)
-        self.sync(ROOTDIR/'.gclient')
+        self.sync()
 
         for arch in arch:
             for mode in mode:

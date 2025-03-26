@@ -50,7 +50,7 @@ index b74b2e2..3e907b8 100644
  
 -if (custom_toolchain != "") {
 +if (is_termux) {
-+  host_toolchain = "//build/toolchain/termux:termux"
++  host_toolchain = "//build/toolchain/linux:clang_$host_cpu"
 +  set_default_toolchain("//build/toolchain/termux")
 +} else if (custom_toolchain != "") {
    assert(custom_sysroot != "")

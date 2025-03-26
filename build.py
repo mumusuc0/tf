@@ -89,7 +89,7 @@ class Build:
             '--gn-args', 'skia_support_perfetto=false',
             '--gn-args', 'custom_sysroot=""',
         ]
-        subprocess.run(cmd, cwd=FLUTTER, check=True, stderr=True)
+        subprocess.run(cmd, cwd=FLUTTER, check=True, stdout=True, stderr=True)
 
     def build(self, arch: str, runtime: str):
         cmd = [

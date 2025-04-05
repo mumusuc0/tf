@@ -20,9 +20,6 @@ jobs:
     - name: install python requirements
       run: pip install -r requirements.txt
 
-    - name: install sysroot
-      run: tar -xJf sysroot.tar.xz
-
     - name: SSH
       uses: csexton/debugger-action@master
 

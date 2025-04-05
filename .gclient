@@ -35,6 +35,11 @@ solutions = [
         'pattern': '.',
         'action': ['git', "-C", "engine/src/flutter/third_party/dart", "apply", "../../../../../../patches/dart.patch"],
       },
+      {
+        'name': 'patch skia',
+        'pattern': '.',
+        'action': ['git', "-C", "engine/src/flutter/third_party/skia", "apply", "../../../../../../patches/skia.patch"],
+      },
     ]
   }
 ]

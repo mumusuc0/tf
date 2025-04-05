@@ -105,7 +105,7 @@ class Build:
         toolchain: str = None,
     ):
         root = root or self.root
-        sysroot = os.path.abspath(sysroot or self.sysroot)
+        sysroot = os.path.abspath(sysroot or self.sysroot.path)
         toolchain = os.path.abspath(toolchain or self.toolchain)
         cmd = [
             'vpython3',
@@ -125,12 +125,13 @@ class Build:
             '--target-toolchain', toolchain,
             '--target-sysroot', sysroot,
             '--runtime-mode', mode,
-            '--gn-args', 'is_termux=true',
             '--gn-args', 'is_desktop_linux=false',
             '--gn-args', 'use_default_linux_sysroot=false',
             '--gn-args', 'dart_support_perfetto=false',
             '--gn-args', 'skia_support_perfetto=false',
             '--gn-args', 'custom_sysroot=""',
+            '--gn-args', 'is_termux=true',
+            '--gn-args', f'is_termux_host={str(utils.is_termux()).lower()}',
         ]
         subprocess.run(cmd, cwd=root, check=True, stdout=True, stderr=True)
 

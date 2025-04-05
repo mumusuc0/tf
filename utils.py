@@ -5,9 +5,13 @@ import inspect
 from loguru import logger
 from functools import wraps
 
-
+__MARK__ = '/data/data/com.termux/files/usr'
 __ARCH__ = dict(arm='arm', arm64='aarch64', x86_64='x86_64', x86='i686')
 __MODE__ = ('release', 'debug', 'profile')
+
+
+def is_termux():
+    return os.environ.get('PREFIX') == __MARK__
 
 
 def termux_arch(arch: str):

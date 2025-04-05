@@ -1,87 +1,137 @@
 #!/usr/bin/env python3
 
 import os
+import sys
+import git
 import fire
+import yaml
+import utils
 import shutil
 import tomllib
 import subprocess
-import sysroot as sys
+from loguru import logger
 from pathlib import Path
-
-ROOTDIR = Path(__file__).parent
-FLUTTER = ROOTDIR/'flutter'
-SYSROOT = ROOTDIR/'sysroot'
-GCLIENT = ROOTDIR/'.gclient'
-SRCROOT = FLUTTER/'engine/src'
-ARCHENM = ['arm', 'arm64', 'x86_64', 'x86']
-MODEENM = ['debug', 'release', 'profile']
+from sysroot import Sysroot
+from package import Package
 
 
-def _target_triple(arch, api):
-    api = str(api)
-    if arch == 'arm':
-        return 'arm-linux-androideabi' + api
-    if arch == 'arm64':
-        return 'aarch64-linux-android' + api
-    if arch == 'x86':
-        return 'i686-linux-android' + api
-    if arch == 'x86_64':
-        return 'x86_64-linux-android' + api
-    raise ValueError(f"unsupport arch: {arch}")
+class GitProgress(git.RemoteProgress):
+    def update(self, op_code, cur_count, max_count=None, message=''):
+        logger.trace(f"cloning {cur_count}/{max_count} {message}")
 
 
-def _target_output(arch, runtime):
-    return str(SRCROOT/'out'/f"linux_{runtime}_{arch}")
-
-
+@utils.record
 class Build:
-    def sysroot(self, sysroot: str | Path = SYSROOT):
-        sysroot = Path(sysroot)
-        if not sysroot.exists():
-            sysroot.mkdir()
+    @utils.recordm
+    def __init__(self, conf='build.toml'):
+        path = Path(__file__).parent
+        conf = path/conf
 
-        sys.main(SYSROOT)
+        with open(conf, 'rb') as f:
+            cfg = tomllib.load(f)
 
-    def clone(self, tag: str):
-        cmd = [
-            'git', 'clone', '--depth=1',
-            'https://github.com/flutter/flutter',
-            '-b', tag, str(FLUTTER)
-        ]
-        subprocess.run(cmd, check=True, stderr=True)
+        ndk = cfg['ndk'].get('path') or os.environ.get('ANDROID_NDK')
+        api = cfg['ndk'].get('api')
+        tag = cfg['flutter'].get('tag')
+        repo = cfg['flutter'].get('repo')
+        root = cfg['flutter'].get('path')
+        arch = cfg['build'].get('arch')
+        mode = cfg['build'].get('runtime')
+        gclient = cfg['build'].get('gclient')
+        sysroot = cfg['sysroot']
+        package = cfg['package'].get('conf')
+        release = cfg['package'].get('path')
 
-    def sync(self, cfg: str | Path = GCLIENT):
-        assert FLUTTER.is_dir(), f"flutter source dir not exist: {FLUTTER}"
-        assert cfg.exists(), f".gclient not exist: {cfg}"
+        if not ndk:
+            raise ValueError('neither ndk path nor ANDROID_NDK is set')
+        if not tag:
+            raise ValueError('require flutter tag')
 
-        shutil.copy(cfg, FLUTTER/'.gclient')
+        # TODO: check parameters
+        self.tag = tag
+        self.api = api or 26
+        self.conf = conf
+        # TODO: detect host
+        self.host = 'linux-x86_64'
+        self.repo = repo or 'https://github.com/flutter/flutter'
+        self.arch = arch or 'arm64'
+        self.mode = mode or 'debug'
+        self.sysroot = Sysroot(**sysroot)
+        self.root = path/root
+        self.gclient = path/gclient
+        self.release = path/release
+        self.toolchain = Path(ndk, f'toolchains/llvm/prebuilt/{self.host}')
+
+        if not self.release.parent.is_dir():
+            raise ValueError(f'bad release path: "{release}"')
+
+        with open(path/package, 'rb') as f:
+            self.package = yaml.safe_load(f)
+
+    def config(self):
+        info = (f'{k}\t: {v}' for k, v in self.__dict__.items() if k != 'package')
+        logger.info('\n'+'\n'.join(info))
+
+    def sysroot(self, arch: str, out: str = None, **kwargs):
+        if out and kwargs:
+            sysroot = Sysroot(path=out, **kwargs)
+        else:
+            sysroot = self.sysroot
+        sysroot.build(arch)
+
+    def clone(self, *, url: str = None, tag: str = None, out: str = None):
+        url = url or self.repo
+        out = out or self.root
+        tag = tag or self.tag
+        progress = GitProgress()
+
+        try:
+            git.Repo.clone_from(
+                url=url,
+                to_path=out,
+                progress=progress,
+                branch=tag)
+        except git.exc.GitCommandError:
+            raise RuntimeError('\n'.join(progress.error_lines))
+
+    def sync(self, *, cfg: str = None, root: str = None):
+        cfg = cfg or self.gclient
+        src = root or self.root
+
+        shutil.copy(cfg, os.path.join(src, '.gclient'))
         cmd = ['gclient', 'sync', '-DR', '--no-history']
-        subprocess.run(cmd, cwd=FLUTTER, check=True, stdout=True, stderr=True)
+        subprocess.run(cmd, cwd=src, check=True, stdout=True, stderr=True)
 
-    def config(self, arch: str, api: int, ndk: str | Path, runtime: str, sysroot: str = SYSROOT):
-        assert arch in ARCHENM, f'unknown arch "{arch}"'
-        assert api >= 26, f'require api level({api}) >= 26'
-        assert os.path.isdir(ndk), f'require an exists ndk: {ndk}'
-        assert runtime in MODEENM, f'unknown runtime "{runtime}"'
-        assert os.path.isdir(sysroot), f'require an exists sysroot: {sysroot}'
-
-        toolchain = os.path.join(ndk, 'toolchains/llvm/prebuilt/linux-x86_64')
+    def configure(
+        self,
+        arch: str,
+        mode: str,
+        api: int = 26,
+        root: str = None,
+        sysroot: str = None,
+        toolchain: str = None,
+    ):
+        root = root or self.root
+        sysroot = os.path.abspath(sysroot or self.sysroot)
+        toolchain = os.path.abspath(toolchain or self.toolchain)
         cmd = [
             'vpython3',
             'engine/src/flutter/tools/gn',
             '--linux',
             '--linux-cpu', arch,
-            '--embedder-for-target',
-            '--target-triple', _target_triple(arch, api),
+            '--full-dart-sdk',
+            '--enable-fontconfig',
+            '--target-triple', utils.target_triple(arch, api),
             '--no-goma',
             '--no-backtrace',
             '--clang',
+            '--lto',
             '--no-enable-unittests',
             '--no-build-embedder-examples',
             '--no-prebuilt-dart-sdk',
-            '--target-toolchain', str(toolchain),
-            '--target-sysroot', str(sysroot),
-            '--runtime-mode', runtime,
+            '--target-toolchain', toolchain,
+            '--target-sysroot', sysroot,
+            '--runtime-mode', mode,
             '--gn-args', 'is_termux=true',
             '--gn-args', 'is_desktop_linux=false',
             '--gn-args', 'use_default_linux_sysroot=false',
@@ -89,44 +139,64 @@ class Build:
             '--gn-args', 'skia_support_perfetto=false',
             '--gn-args', 'custom_sysroot=""',
         ]
-        subprocess.run(cmd, cwd=FLUTTER, check=True, stdout=True, stderr=True)
+        subprocess.run(cmd, cwd=root, check=True, stdout=True, stderr=True)
 
-    def build(self, arch: str, runtime: str):
+    def build(self, arch: str, mode: str, root: str = None, jobs: int = None):
+        root = root or self.root
         cmd = [
-            'ninja', '-C', _target_output(arch, runtime),
+            'ninja', '-C', utils.target_output(root, arch, mode),
             'flutter/build/archives:artifacts',
             'flutter/build/archives:dart_sdk_archive',
             'flutter/build/archives:flutter_patched_sdk',
             'flutter/shell/platform/linux:flutter_gtk',
             'flutter/tools/font_subset',
         ]
-        subprocess.run(cmd, cwd=FLUTTER, check=True, stdout=True, stderr=True)
+        if jobs:
+            cmd.append(f'-j{jobs}')
+        subprocess.run(cmd, check=True, stdout=True, stderr=True)
+
+    def debuild(self, arch: str, output: str = None, root: str = None, **conf):
+        conf = conf or self.package
+        root = root or self.root
+        output = output or self.output(arch)
+
+        pkg = Package(root=root, arch=arch, **conf)
+        pkg.debuild(output=output)
+
+    def output(self, arch: str):
+        if self.release.is_dir():
+            name = f'flutter_{self.tag}_{utils.termux_arch(arch)}.deb'
+            return self.release/name
+        else:
+            return self.release
 
     # TODO: check gclient and ninja existence
     def __call__(self):
-        with open(ROOTDIR/'build.toml', 'rb') as f:
-            cfg = tomllib.load(f)
-        mode = cfg.get('runtime', ['debug'])
-        arch = cfg.get('arch', ['arm64'])
-        api = cfg.get('api', 26)
-        tag = cfg.get('tag')
-        assert tag is not None, 'require flutter tag'
+        self.config()
 
-        ndk = os.environ.get('ANDROID_NDK')
-        assert ndk is not None, 'require ANDROID_NDK'
+        if not self.sysroot.exists():
+            self.sysroot.mkdir()
 
-        ndk = Path(ndk).expanduser()
-        assert ndk.is_dir(), f"invalid ndk path:\"{ndk}\""
-
-        # self.sysroot()
-        self.clone(tag)
+        self.clone()
         self.sync()
 
-        for arch in arch:
-            for mode in mode:
-                self.config(arch, api, ndk, mode)
-                self.build(arch, mode)
+        for arch in self.arch:
+            self.sysroot(arch=arch)
+            for mode in self.mode:
+                self.configure(arch=arch, mode=mode)
+                self.build(arch=arch, mode=mode)
+            self.debuild(arch=arch, output=self.output(arch))
 
 
 if __name__ == '__main__':
-    fire.Fire(Build)
+    logger.remove()
+    logger.add(
+        sys.stdout,
+        diagnose=False,
+        format=(
+            "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+            "<level>{level: <9}</level> | "
+            "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
+            "<level>{message}</level>")
+        )
+    fire.Fire(Build())

@@ -1,3 +1,4 @@
 flutter
 sysroot
+*.deb
 **/__pycache__

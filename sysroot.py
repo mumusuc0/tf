@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 
 import os
+import utils
 import pathlib
 import asyncio
 import aiohttp
 import tempfile
+import itertools
 import subprocess
 import urllib.parse
+from loguru import logger
 
 
 async def _download(sess, url, dst):
@@ -19,11 +22,9 @@ async def _download(sess, url, dst):
             with open(path, 'wb') as f:
                 async for chunk in resp.content.iter_chunked(8192):
                     f.write(chunk)
-            print(f"✓ 成功下载 {name}")
             return path
     except Exception:
-        print(f"✗ 下载失败 {name}")
-        raise
+        raise RuntimeError(f'✗ 下载失败 {name}')
 
 
 async def _spawn(tasks):
@@ -39,43 +40,108 @@ async def _spawn(tasks):
     return [r.result() for r in done]
 
 
-async def _download_packages(packages, output):
-    with open(packages, 'r') as f:
-        urls = [url.strip() for url in f.readlines() if url.strip()]
-
+async def _download_packages(out, arch, *src):
     timeout = aiohttp.ClientTimeout(total=500)
     async with aiohttp.ClientSession(timeout=timeout) as sess:
-        return await _spawn([_download(sess, url, output) for url in urls])
+        urls = await _spawn([
+            _resolve_packages(sess, arch, **it) for it in src
+        ])
+        urls = itertools.chain(*urls)
+        return await _spawn([
+            _download(sess, url, out) for url in urls
+        ])
 
 
-def _extract(pkg, out):
-    subprocess.run(['dpkg', '-x', str(pkg), str(out)], check=True, stderr=True)
-    print(f"✓ 成功安装 {pkg.name}")
+async def _resolve_packages(sess, arch, repo, dist, pkgs):
+    if not repo or not pkgs:
+        return dict()
+
+    bin = f'dists/{dist}/main/binary-{arch}/Packages'
+    url = urllib.parse.urljoin(repo, bin)
+
+    current = None
+    package = dict()
+
+    async with sess.get(url) as resp:
+        resp.raise_for_status()
+        async for line in resp.content:
+            line = line.decode().strip()
+
+            if line.startswith('Package:'):
+                current = line.split(':')[1].strip()
+            elif current in pkgs and line.startswith('Filename:'):
+                urlpath = line.split(':')[1].strip()
+                package[current] = urllib.parse.urljoin(repo, urlpath)
+
+            if len(package) == len(pkgs):
+                break
+
+    remains = [it for it in pkgs if it not in package]
+    if remains:
+        raise FileNotFoundError(f'packages{remains} not found.')
+    return package.values()
 
 
-async def _work(out, pkg):
+def _extract(out, deb):
+    subprocess.run(['dpkg', '-x', str(deb), str(out)], check=True, stderr=True)
+    logger.info(f'✓ 成功安装 {deb.name}')
+
+
+async def _work(out, arch, *src):
     with tempfile.TemporaryDirectory() as tmp:
-        for pkg in await _download_packages(pkg, tmp):
-            _extract(pkg, out)
+        for deb in await _download_packages(tmp, arch, *src):
+            _extract(out, deb)
+
     usr = out/'usr'
     dst = 'data/data/com.termux/files/usr'
+
+    assert os.path.isdir(out/dst)
+
     try:
         usr.symlink_to(dst, True)
     except FileExistsError:
         if not usr.samefile(out/dst):
             raise
-    pthread = out/'usr/lib/libpthread.so'
+
+    pthread = out/'usr/lib/libpthread.a'
     pthread.write_bytes(b'INPUT(-lc)')
 
 
-def main(out, pkg='packages.txt'):
-    out = pathlib.Path(out).expanduser()
-    assert out.is_dir(), f'"{out}" is not an existing dir'
+@utils.record
+class Sysroot:
+    def __init__(self, path: str, **kwargs):
+        self.path = pathlib.Path(path).expanduser().resolve()
 
-    asyncio.run(_work(out, pkg))
+        if not self.path.exists():
+            self.path.mkdir()
+        assert self.path.is_dir(), f'bad sysroot path: "{path}"'
+
+        for k, v in kwargs.items():
+            if isinstance(v, dict):
+                self.include(k, **v)
+
+    def include(self, name, repo, dist, pkgs):
+        assert name and repo and dist and pkgs
+
+        self.__dict__[name] = dict(repo=repo, dist=dist, pkgs=pkgs)
+
+    def build(self, arch: str):
+        arch = utils.termux_arch(arch)
+
+        if self.__dict__:
+            asyncio.run(_work(self.path, arch, *self.__dict__().values()))
+        else:
+            logger.info('no work to do.')
+
+    def __str__(self):
+        return str(self.path)
 
 
 if __name__ == '__main__':
-    assert len(os.sys.argv) > 1, 'require sysroot dir'
+    import fire
+    import tomllib
 
-    main(out=os.sys.argv[1])
+    with open('build.toml', 'rb') as f:
+        src = tomllib.load(f)
+
+    fire.Fire(Sysroot(**src['sysroot']))

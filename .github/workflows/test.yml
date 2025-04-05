@@ -30,6 +30,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: artifact
-        path: flutter/engine/src/out/*/zip_archives
-        path: '**/*.deb'
+        path: |
+          flutter/engine/src/out/*/zip_archives
+          **/*.deb
         compression-level: 0

@@ -72,13 +72,6 @@ class Build:
         info = (f'{k}\t: {v}' for k, v in self.__dict__.items() if k != 'package')
         logger.info('\n'+'\n'.join(info))
 
-    def sysroot(self, arch: str, out: str = None, **kwargs):
-        if out and kwargs:
-            sysroot = Sysroot(path=out, **kwargs)
-        else:
-            sysroot = self.sysroot
-        sysroot.build(arch)
-
     def clone(self, *, url: str = None, tag: str = None, out: str = None):
         url = url or self.repo
         out = out or self.root
@@ -173,10 +166,6 @@ class Build:
     # TODO: check gclient and ninja existence
     def __call__(self):
         self.config()
-
-        if not self.sysroot.exists():
-            self.sysroot.mkdir()
-
         self.clone()
         self.sync()
 

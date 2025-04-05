@@ -54,13 +54,13 @@ async def _download_packages(out, arch, *src):
 
 async def _resolve_packages(sess, arch, repo, dist, pkgs):
     if not repo or not pkgs:
-        return dict()
+        return {}
 
     bin = f'dists/{dist}/main/binary-{arch}/Packages'
     url = urllib.parse.urljoin(repo, bin)
 
     current = None
-    package = dict()
+    package = {}
 
     async with sess.get(url) as resp:
         resp.raise_for_status()
@@ -111,6 +111,7 @@ async def _work(out, arch, *src):
 class Sysroot:
     def __init__(self, path: str, **kwargs):
         self.path = pathlib.Path(path).expanduser().resolve()
+        self.data = {}
 
         if not self.path.exists():
             self.path.mkdir()
@@ -123,13 +124,13 @@ class Sysroot:
     def include(self, name, repo, dist, pkgs):
         assert name and repo and dist and pkgs
 
-        self.__dict__[name] = dict(repo=repo, dist=dist, pkgs=pkgs)
+        self.data[name] = {'repo': repo, 'dist': dist, 'pkgs': pkgs}
 
-    def build(self, arch: str):
+    def __call__(self, arch: str):
         arch = utils.termux_arch(arch)
 
-        if self.__dict__:
-            asyncio.run(_work(self.path, arch, *self.__dict__().values()))
+        if self.data:
+            asyncio.run(_work(self.path, arch, *self.data.values()))
         else:
             logger.info('no work to do.')
 
